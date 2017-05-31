@@ -28,10 +28,11 @@
 #include <cv_bridge/cv_bridge.h>
 #include "geometry_msgs/PoseStamped.h"
 #include <tf/transform_broadcaster.h>
+#include <std_msgs/Float64.h>
 
 #include<opencv2/core/core.hpp>
 #include "Converter.h"
-
+#include "ORB_SLAM2/SaveFile.h"
 
 #include"../../../include/System.h"
 
@@ -52,6 +53,15 @@ public:
 };
 
 //ros::Publisher pPosPub;
+std_msgs::Float64 const_x;
+std_msgs::Float64 const_y;
+std_msgs::Float64 const_z;
+ORB_SLAM2::System *SLAM_;
+
+void SetX(const std_msgs::Float64 msg);
+void SetY(const std_msgs::Float64 msg);
+void SetZ(const std_msgs::Float64 msg);
+bool SaveFile(ORB_SLAM2::SaveFile::Request &req, ORB_SLAM2::SaveFile::Response &res);
 
 void ImageGrabber::PublishPose(cv::Mat Tcw)
 {
@@ -77,9 +87,9 @@ void ImageGrabber::PublishPose(cv::Mat Tcw)
 
             //mTfBr.sendTransform(tf::StampedTransform(tfTcw,ros::Time::now(), "ORB_SLAM/World", "ORB_SLAM/Camera"));
         */
-        poseMSG.pose.position.x = twc.at<float>(0);
-        poseMSG.pose.position.y = twc.at<float>(2);
-        poseMSG.pose.position.z = twc.at<float>(1);
+        poseMSG.pose.position.x = twc.at<float>(0) * const_x.data;
+        poseMSG.pose.position.y = -1*twc.at<float>(2) * const_y.data;
+        poseMSG.pose.position.z = twc.at<float>(1) * const_z.data;
         poseMSG.pose.orientation.x = q[0];
         poseMSG.pose.orientation.y = q[1];
         poseMSG.pose.orientation.z = q[2];
@@ -101,18 +111,19 @@ int main(int argc, char **argv)
 	bool bReuseMap = false;
     if(argc < 4)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings" << endl;        
+        cerr << endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings" << endl;
         ros::shutdown();
         return 1;
-    }    
+    }
 
+    // ORB_SLAM2::System SLAM = NULL;
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
 	if (!strcmp(argv[3], "true"))
     {
 		bReuseMap = true;
 	}
-   	ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true, bReuseMap);
-    
+    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true, bReuseMap, argv[4]);
+    SLAM_ = &SLAM;
     //if (bReuseMap)
 		//SLAM.LoadMap("Slam_Map.bin");
     
@@ -124,8 +135,18 @@ int main(int argc, char **argv)
     // Pose broadcaster
     //pPosPub = new ros::Publisher;
     ros::Publisher PosPub = nodeHandler.advertise<geometry_msgs::PoseStamped>("ORB_SLAM/pose", 5);
-    
+
         igb.pPosPub = &(PosPub);
+
+    
+    ros::Subscriber subX = nodeHandler.subscribe("/orb/x", 1, &SetX);
+    ros::Subscriber subY = nodeHandler.subscribe("/orb/y", 1, &SetY);
+    ros::Subscriber subZ = nodeHandler.subscribe("/orb/z", 1, &SetZ);
+    const_x.data = 1.0;
+    const_y.data = 1.0;
+    const_z.data = 1.0;
+
+    ros::ServiceServer service = nodeHandler.advertiseService("ORB_SLAM/SaveFile", SaveFile);
 
     ros::spin();
 
@@ -134,7 +155,7 @@ int main(int argc, char **argv)
 
 
     // Save map
-    SLAM.SaveMap("Slam_latest_Map.bin");
+//    SLAM.SaveMap("Slam_latest_Map.bin");
     
 
     // Save camera trajectory
@@ -163,4 +184,23 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     //usleep(10000);
 }
 
+void SetX(const std_msgs::Float64 msg){
+    const_x = msg;
+    cout << "X: "<< msg << endl;
+}
 
+void SetY(const std_msgs::Float64 msg){
+    const_y = msg;
+    cout << "Y: " << msg << endl;
+}
+
+void SetZ(const std_msgs::Float64 msg){
+    const_z = msg;
+    cout << "Z: " << msg << endl;
+}
+
+bool SaveFile(ORB_SLAM2::SaveFile::Request &req, ORB_SLAM2::SaveFile::Response &res){
+    SLAM_->SaveMap(req.location.data);
+    res.sucess.data = true;
+    return true;
+}

@@ -16,7 +16,7 @@
 #include<vector>
 #include<chrono>
 #include<iomanip>
-#include<opencv2/core.hpp>
+#include<opencv2/core/core.hpp>
 #include<Converter.h>
 
 #include<System.h>

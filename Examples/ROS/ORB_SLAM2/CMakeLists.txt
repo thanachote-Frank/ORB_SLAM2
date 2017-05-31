@@ -94,3 +94,12 @@ src/ros_rgbd.cc
 target_link_libraries(RGBD
 ${LIBS}
 )
+
+find_package(catkin REQUIRED
+        COMPONENTS message_generation std_msgs)
+
+add_service_files(FILES
+        SaveFile.srv)
+
+generate_messages(DEPENDENCIES std_msgs)
+
